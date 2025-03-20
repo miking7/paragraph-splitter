@@ -8,7 +8,7 @@
 ### API Integration
 - Default endpoint: OpenAI API compatible
 - Configurable temperature (default: 0.1 for consistency)
-- Model selection in settings (default: most cost-effective option)
+- Model selection in settings (default: gpt-4o-mini)
 - Direct fetch API calls from browser
 
 ### Error Handling
@@ -52,8 +52,10 @@ A minimal Single Page Application in a single HTML file that efficiently segment
 ### 1. Text Input & Processing
 - Simple text input area for pasting raw transcription
 - Basic preprocessing:
-  - Split text into sentences using string operations (based on full stops)
+  - Split text into sentences using string operations (based on punctuation)
+  - Handle consecutive punctuation marks (like ellipses) as a single split point
   - Assign sequential numbers to each sentence
+- Display statistics: sentence count, word count, and character count
 
 ### 2. Paragraph Segmentation
 - Sentence Grouping Approach:
@@ -69,6 +71,7 @@ A minimal Single Page Application in a single HTML file that efficiently segment
 
 ### 4. Output & Export
 - Display segmented text with paragraph breaks in output area
+- Show statistics: paragraph count, sentence count, and word count
 - One-click copy to clipboard functionality
 
 ## Technical Architecture
@@ -107,11 +110,12 @@ A minimal Single Page Application in a single HTML file that efficiently segment
 7. Final text is available for export
 
 ### Key Functions
-- `splitSentences()`: Divide text using regular expressions
+- `splitSentences()`: Divide text using regular expressions, handling consecutive punctuation
 - `preparePrompt()`: Format numbered sentences for LLM
 - `callLLMService()`: Make API request to language model
+- `parseParagraphStructure()`: Extract paragraph structure from LLM response
 - `reconstructParagraphs()`: Apply LLM structure to original text
-- `exportText()`: Generate formatted output
+- `copyToClipboard()`: Copy formatted output to clipboard
 
 ## User Interface
 
@@ -145,9 +149,9 @@ A minimal Single Page Application in a single HTML file that efficiently segment
 - localStorage for saving API settings
 - Copy to clipboard functionality
 
-### Phase 2: Refinements (Optional)
+### Phase 2: Refinements (Implemented)
 - Error handling for API failures
-- Character/word count display
+- Statistics display (sentences, words, characters, paragraphs)
 - Loading indicator during processing
 - Basic mobile responsiveness
 

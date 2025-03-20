@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Paragraph Splitter</title>
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Vue.js via CDN -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        /* Any custom styles beyond Tailwind if needed */
+        .fade-enter-active, .fade-leave-active {
+            transition: opacity 0.3s;
+        }
+        .fade-enter-from, .fade-leave-to {
+            opacity: 0;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div id="app" class="container mx-auto px-4 py-8 max-w-5xl">
+        <header class="mb-8 text-center">
+            <h1 class="text-3xl font-bold text-gray-800">Paragraph Splitter</h1>
+            <p class="text-gray-600">Split your text into logical paragraphs using AI</p>
+        </header>
+
+        <main class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Input Section -->
+            <div class="bg-white rounded-lg shadow-md p-4">
+                <h2 class="text-xl font-semibold mb-2 text-gray-700">Input Text</h2>
+                <textarea 
+                    v-model="inputText" 
+                    class="w-full h-64 p-3 border border-gray-300 rounded resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Paste your unparagraphed text here..."
+                ></textarea>
+                <div class="mt-4 flex justify-between items-center">
+                    <span class="text-sm text-gray-500">{{ inputStats }}</span>
+                    <button 
+                        @click="processText" 
+                        class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md transition-colors"
+                        :disabled="isProcessing || !inputText.trim()"
+                        :class="{'opacity-50 cursor-not-allowed': isProcessing || !inputText.trim()}"
+                    >
+                        <span v-if="isProcessing">Processing...</span>
+                        <span v-else>Split Paragraphs</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Output Section -->
+            <div class="bg-white rounded-lg shadow-md p-4">
+                <h2 class="text-xl font-semibold mb-2 text-gray-700">Output Text</h2>
+                <textarea 
+                    v-model="outputText" 
+                    class="w-full h-64 p-3 border border-gray-300 rounded resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Paragraphed text will appear here..."
+                    readonly
+                ></textarea>
+                <div class="mt-4 flex justify-between items-center">
+                    <span class="text-sm text-gray-500">{{ outputStats }}</span>
+                    <button 
+                        @click="copyToClipboard" 
+                        class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md transition-colors"
+                        :disabled="!outputText"
+                        :class="{'opacity-50 cursor-not-allowed': !outputText}"
+                    >
+                        <span v-if="copied">Copied!</span>
+                        <span v-else>Copy to Clipboard</span>
+                    </button>
+                </div>
+            </div>
+        </main>
+
+        <!-- Settings Panel -->
+        <div class="mt-8">
+            <button 
+                @click="showSettings = !showSettings" 
+                class="flex items-center text-gray-700 hover:text-blue-600 transition-colors"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" />
+                </svg>
+                <span>{{ showSettings ? 'Hide Settings' : 'Show Settings' }}</span>
+            </button>
+
+            <transition name="fade">
+                <div v-if="showSettings" class="mt-4 bg-white rounded-lg shadow-md p-6">
+                    <h3 class="text-lg font-semibold mb-4 text-gray-700">API Settings</h3>
+                    
+                    <div class="mb-4">
+                        <label class="block text-gray-700 text-sm font-medium mb-2" for="apiEndpoint">
+                            API Endpoint
+                        </label>
+                        <input 
+                            id="apiEndpoint" 
+                            v-model="settings.apiEndpoint" 
+                            type="text" 
+                            class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="https://api.openai.com/v1/chat/completions"
+                        >
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="block text-gray-700 text-sm font-medium mb-2" for="apiKey">
+                            API Key
+                        </label>
+                        <input 
+                            id="apiKey" 
+                            v-model="settings.apiKey" 
+                            type="password" 
+                            class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="Your API key"
+                        >
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="block text-gray-700 text-sm font-medium mb-2" for="model">
+                            Model
+                        </label>
+                        <input 
+                            id="model" 
+                            v-model="settings.model" 
+                            type="text" 
+                            class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="gpt-4o-mini"
+                        >
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="block text-gray-700 text-sm font-medium mb-2" for="temperature">
+                            Temperature: {{ settings.temperature }}
+                        </label>
+                        <input 
+                            id="temperature" 
+                            v-model="settings.temperature" 
+                            type="range" 
+                            min="0" 
+                            max="1" 
+                            step="0.1" 
+                            class="w-full"
+                        >
+                    </div>
+                    
+                    <div class="flex justify-end">
+                        <button 
+                            @click="saveSettings" 
+                            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md transition-colors"
+                        >
+                            Save Settings
+                        </button>
+                    </div>
+                </div>
+            </transition>
+        </div>
+
+        <!-- Error Alert -->
+        <transition name="fade">
+            <div v-if="error" class="fixed bottom-4 right-4 bg-red-100 border-l-4 border-red-500 text-red-700 p-4 max-w-md rounded shadow-md">
+                <div class="flex">
+                    <div class="py-1">
+                        <svg class="h-6 w-6 text-red-500 mr-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                    <div>
+                        <p class="font-bold">Error</p>
+                        <p>{{ error }}</p>
+                    </div>
+                </div>
+                <button @click="error = ''" class="absolute top-2 right-2 text-red-700">
+                    <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                    </svg>
+                </button>
+            </div>
+        </transition>
+    </div>
+
+    <script>
+        const { createApp, ref, computed, watch, onMounted } = Vue;
+
+        createApp({
+            setup() {
+                // State
+                const inputText = ref('');
+                const outputText = ref('');
+                const isProcessing = ref(false);
+                const copied = ref(false);
+                const showSettings = ref(false);
+                const error = ref('');
+                const settings = ref({
+                    apiEndpoint: 'https://api.openai.com/v1/chat/completions',
+                    apiKey: '',
+                    model: 'gpt-4o-mini',
+                    temperature: 0.1
+                });
+
+                // Computed properties
+                const inputStats = computed(() => {
+                    const text = inputText.value.trim();
+                    if (!text) return 'No text';
+                    
+                    const words = text.split(/\s+/).length;
+                    const chars = text.length;
+                    return `${words} words, ${chars} characters`;
+                });
+
+                const outputStats = computed(() => {
+                    const text = outputText.value.trim();
+                    if (!text) return 'No text';
+                    
+                    const paragraphs = text.split(/\n\n+/).length;
+                    const words = text.split(/\s+/).length;
+                    return `${paragraphs} paragraphs, ${words} words`;
+                });
+
+                // Methods
+                const loadSettings = () => {
+                    const savedSettings = localStorage.getItem('paragraphSplitterSettings');
+                    if (savedSettings) {
+                        try {
+                            const parsed = JSON.parse(savedSettings);
+                            settings.value = { ...settings.value, ...parsed };
+                        } catch (e) {
+                            console.error('Failed to parse saved settings:', e);
+                        }
+                    }
+                };
+
+                const saveSettings = () => {
+                    localStorage.setItem('paragraphSplitterSettings', JSON.stringify(settings.value));
+                    showSettings.value = false;
+                };
+
+                const splitSentences = (text) => {
+                    // Simple regex to split text into sentences
+                    // This is a basic implementation and might need refinement
+                    const sentences = text.replace(/([.!?])\s+/g, "$1\n").split("\n");
+                    return sentences.filter(s => s.trim().length > 0);
+                };
+
+                const preparePrompt = (sentences) => {
+                    // Number each sentence for the LLM
+                    const numberedSentences = sentences.map((s, i) => `${i + 1}. ${s}`).join(' ');
+                    
+                    // Create the prompt for the LLM
+                    return {
+                        role: "user",
+                        content: `Identify which sentences should be grouped together into paragraphs. Return ONLY the paragraph structure in this format: 'P1: 1-4; P2: 5-9; ...' with no additional text.\n\n${numberedSentences}`
+                    };
+                };
+
+                const callLLMService = async (prompt) => {
+                    try {
+                        const response = await fetch(settings.value.apiEndpoint, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${settings.value.apiKey}`
+                            },
+                            body: JSON.stringify({
+                                model: settings.value.model,
+                                messages: [prompt],
+                                temperature: parseFloat(settings.value.temperature)
+                            })
+                        });
+
+                        if (!response.ok) {
+                            const errorData = await response.json();
+                            throw new Error(errorData.error?.message || 'API request failed');
+                        }
+
+                        const data = await response.json();
+                        return data.choices[0].message.content.trim();
+                    } catch (e) {
+                        throw new Error(`API Error: ${e.message}`);
+                    }
+                };
+
+                const parseParagraphStructure = (structure) => {
+                    // Parse the LLM response to get paragraph structure
+                    // Expected format: "P1: 1-4; P2: 5-9; P3: 10-15"
+                    const paragraphs = [];
+                    
+                    // Extract paragraph ranges using regex
+                    const regex = /P\d+:\s*(\d+)-(\d+)/g;
+                    let match;
+                    
+                    while ((match = regex.exec(structure)) !== null) {
+                        const start = parseInt(match[1]);
+                        const end = parseInt(match[2]);
+                        
+                        if (!isNaN(start) && !isNaN(end)) {
+                            paragraphs.push({ start, end });
+                        }
+                    }
+                    
+                    return paragraphs;
+                };
+
+                const reconstructParagraphs = (sentences, paragraphStructure) => {
+                    // Reconstruct the text with paragraph breaks based on the structure
+                    let result = '';
+                    let currentIndex = 1;
+                    
+                    for (const paragraph of paragraphStructure) {
+                        const paragraphSentences = [];
+                        
+                        for (let i = paragraph.start - 1; i < paragraph.end; i++) {
+                            if (i < sentences.length) {
+                                paragraphSentences.push(sentences[i]);
+                            }
+                        }
+                        
+                        if (paragraphSentences.length > 0) {
+                            result += paragraphSentences.join(' ') + '\n\n';
+                        }
+                        
+                        currentIndex = paragraph.end + 1;
+                    }
+                    
+                    // Add any remaining sentences as a final paragraph
+                    if (currentIndex <= sentences.length) {
+                        const remainingSentences = sentences.slice(currentIndex - 1);
+                        result += remainingSentences.join(' ');
+                    }
+                    
+                    return result.trim();
+                };
+
+                const processText = async () => {
+                    if (!inputText.value.trim() || isProcessing.value) return;
+                    
+                    if (!settings.value.apiKey) {
+                        error.value = 'Please enter your API key in the settings';
+                        showSettings.value = true;
+                        return;
+                    }
+                    
+                    isProcessing.value = true;
+                    error.value = '';
+                    
+                    try {
+                        // Split text into sentences
+                        const sentences = splitSentences(inputText.value);
+                        
+                        if (sentences.length === 0) {
+                            throw new Error('No valid sentences found in the input text');
+                        }
+                        
+                        // Prepare prompt for LLM
+                        const prompt = preparePrompt(sentences);
+                        
+                        // Call LLM service
+                        const llmResponse = await callLLMService(prompt);
+                        
+                        // Parse paragraph structure from LLM response
+                        const paragraphStructure = parseParagraphStructure(llmResponse);
+                        
+                        if (paragraphStructure.length === 0) {
+                            throw new Error('Failed to parse paragraph structure from LLM response');
+                        }
+                        
+                        // Reconstruct paragraphs
+                        const paragraphedText = reconstructParagraphs(sentences, paragraphStructure);
+                        
+                        // Update output
+                        outputText.value = paragraphedText;
+                    } catch (e) {
+                        error.value = e.message;
+                        console.error('Processing error:', e);
+                    } finally {
+                        isProcessing.value = false;
+                    }
+                };
+
+                const copyToClipboard = () => {
+                    if (!outputText.value) return;
+                    
+                    navigator.clipboard.writeText(outputText.value)
+                        .then(() => {
+                            copied.value = true;
+                            setTimeout(() => {
+                                copied.value = false;
+                            }, 2000);
+                        })
+                        .catch(e => {
+                            error.value = 'Failed to copy to clipboard';
+                            console.error('Clipboard error:', e);
+                        });
+                };
+
+                // Lifecycle hooks
+                onMounted(() => {
+                    loadSettings();
+                    
+                    // Try to load saved text from localStorage
+                    const savedInput = localStorage.getItem('paragraphSplitterInput');
+                    if (savedInput) {
+                        inputText.value = savedInput;
+                    }
+                });
+
+                // Save input text to localStorage when it changes
+                watch(inputText, (newValue) => {
+                    localStorage.setItem('paragraphSplitterInput', newValue);
+                });
+
+                return {
+                    inputText,
+                    outputText,
+                    isProcessing,
+                    copied,
+                    showSettings,
+                    error,
+                    settings,
+                    inputStats,
+                    outputStats,
+                    processText,
+                    copyToClipboard,
+                    saveSettings
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
