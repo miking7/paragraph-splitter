@@ -203,7 +203,8 @@
                     
                     const words = text.split(/\s+/).length;
                     const chars = text.length;
-                    return `${words} words, ${chars} characters`;
+                    const sentences = splitSentences(text).length;
+                    return `${sentences} sentences, ${words} words, ${chars} characters`;
                 });
 
                 const outputStats = computed(() => {
@@ -212,7 +213,8 @@
                     
                     const paragraphs = text.split(/\n\n+/).length;
                     const words = text.split(/\s+/).length;
-                    return `${paragraphs} paragraphs, ${words} words`;
+                    const sentences = splitSentences(text).length;
+                    return `${paragraphs} paragraphs, ${sentences} sentences, ${words} words`;
                 });
 
                 // Methods
@@ -234,9 +236,9 @@
                 };
 
                 const splitSentences = (text) => {
-                    // Simple regex to split text into sentences
-                    // This is a basic implementation and might need refinement
-                    const sentences = text.replace(/([.!?])\s+/g, "$1\n").split("\n");
+                    // Split on punctuation (including groups of consecutive punctuation) followed by whitespace
+                    // This handles ellipses and other consecutive punctuation as a single split point
+                    const sentences = text.replace(/([.!?]+)\s+/g, "$1\n").split("\n");
                     return sentences.filter(s => s.trim().length > 0);
                 };
 
