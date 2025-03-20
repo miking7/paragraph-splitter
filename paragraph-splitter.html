@@ -34,17 +34,26 @@
                     class="w-full h-64 p-3 border border-gray-300 rounded resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Paste your unparagraphed text here..."
                 ></textarea>
-                <div class="mt-4 flex justify-between items-center">
-                    <span class="text-sm text-gray-500">{{ inputStats }}</span>
-                    <button 
-                        @click="processText" 
-                        class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md transition-colors"
-                        :disabled="isProcessing || !inputText.trim()"
-                        :class="{'opacity-50 cursor-not-allowed': isProcessing || !inputText.trim()}"
-                    >
-                        <span v-if="isProcessing">Processing...</span>
-                        <span v-else>Split Paragraphs</span>
-                    </button>
+                <div class="mt-4 flex flex-col gap-2">
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm text-gray-500">{{ inputStats }}</span>
+                        <button 
+                            @click="processText" 
+                            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md transition-colors"
+                            :disabled="isProcessing || !inputText.trim()"
+                            :class="{'opacity-50 cursor-not-allowed': isProcessing || !inputText.trim()}"
+                        >
+                            <span v-if="isProcessing">Processing...</span>
+                            <span v-else>Split Paragraphs</span>
+                        </button>
+                    </div>
+                    <!-- Progress Bar -->
+                    <div v-if="isProcessing" class="w-full">
+                        <div class="w-full bg-gray-200 rounded-full h-2.5">
+                            <div class="bg-blue-600 h-2.5 rounded-full" :style="{ width: `${progressPercent}%` }"></div>
+                        </div>
+                        <p class="text-sm text-gray-600 mt-1">{{ progressStatus }} ({{ Math.round(progressPercent) }}%)</p>
+                    </div>
                 </div>
             </div>
 
@@ -189,6 +198,8 @@
                 const copied = ref(false);
                 const showSettings = ref(false);
                 const error = ref('');
+                const progressPercent = ref(0);
+                const progressStatus = ref('');
                 const settings = ref({
                     apiEndpoint: 'https://api.openai.com/v1/chat/completions',
                     apiKey: '',
@@ -331,6 +342,67 @@
                     return result.trim();
                 };
 
+                // Batch processing functions
+                const createBatches = (sentences, batchSize = 50, overlap = 10) => {
+                    const batches = [];
+                    for (let i = 0; i < sentences.length; i += batchSize - overlap) {
+                        const end = Math.min(i + batchSize, sentences.length);
+                        batches.push({
+                            sentences: sentences.slice(i, end),
+                            startIndex: i + 1, // 1-based indexing for the LLM
+                            endIndex: end
+                        });
+                    }
+                    return batches;
+                };
+
+                const adjustParagraphStructure = (paragraphStructure, isFirstBatch, isLastBatch, overlap, batchStartIndex) => {
+                    if (paragraphStructure.length === 0) return [];
+                    
+                    // Adjust for batch position
+                    if (!isFirstBatch) {
+                        // For non-first batches, ignore decisions for the first 'overlap' sentences
+                        paragraphStructure = paragraphStructure.filter(p => p.end > overlap);
+                        
+                        // Adjust indices to account for overlap
+                        paragraphStructure = paragraphStructure.map(p => ({
+                            start: Math.max(p.start, overlap + 1),
+                            end: p.end
+                        }));
+                    }
+                    
+                    // Adjust indices to global sentence positions
+                    return paragraphStructure.map(p => ({
+                        start: p.start + batchStartIndex - 1,
+                        end: p.end + batchStartIndex - 1
+                    }));
+                };
+
+                const processBatch = async (batch, batchIndex, totalBatches, overlap) => {
+                    progressStatus.value = `Processing batch ${batchIndex + 1} of ${totalBatches}...`;
+                    
+                    // Process this batch
+                    const batchSentences = batch.sentences;
+                    const prompt = preparePrompt(batchSentences);
+                    const llmResponse = await callLLMService(prompt);
+                    const paragraphStructure = parseParagraphStructure(llmResponse);
+                    
+                    if (paragraphStructure.length === 0) {
+                        throw new Error(`Failed to parse paragraph structure for batch ${batchIndex + 1}`);
+                    }
+                    
+                    // Adjust paragraph structure based on batch position
+                    const adjustedStructure = adjustParagraphStructure(
+                        paragraphStructure, 
+                        batchIndex === 0, // isFirstBatch
+                        batchIndex === totalBatches - 1, // isLastBatch
+                        overlap,
+                        batch.startIndex
+                    );
+                    
+                    return adjustedStructure;
+                };
+
                 const processText = async () => {
                     if (!inputText.value.trim() || isProcessing.value) return;
                     
@@ -342,6 +414,8 @@
                     
                     isProcessing.value = true;
                     error.value = '';
+                    progressPercent.value = 0;
+                    progressStatus.value = 'Preparing to process...';
                     
                     try {
                         // Split text into sentences
@@ -351,24 +425,83 @@
                             throw new Error('No valid sentences found in the input text');
                         }
                         
-                        // Prepare prompt for LLM
-                        const prompt = preparePrompt(sentences);
-                        
-                        // Call LLM service
-                        const llmResponse = await callLLMService(prompt);
-                        
-                        // Parse paragraph structure from LLM response
-                        const paragraphStructure = parseParagraphStructure(llmResponse);
-                        
-                        if (paragraphStructure.length === 0) {
-                            throw new Error('Failed to parse paragraph structure from LLM response');
+                        // For small texts, process in a single batch
+                        if (sentences.length <= 50) {
+                            progressStatus.value = 'Processing text...';
+                            progressPercent.value = 30;
+                            
+                            // Prepare prompt for LLM
+                            const prompt = preparePrompt(sentences);
+                            
+                            // Call LLM service
+                            const llmResponse = await callLLMService(prompt);
+                            progressPercent.value = 70;
+                            
+                            // Parse paragraph structure from LLM response
+                            const paragraphStructure = parseParagraphStructure(llmResponse);
+                            
+                            if (paragraphStructure.length === 0) {
+                                throw new Error('Failed to parse paragraph structure from LLM response');
+                            }
+                            
+                            // Reconstruct paragraphs
+                            progressStatus.value = 'Reconstructing paragraphs...';
+                            const paragraphedText = reconstructParagraphs(sentences, paragraphStructure);
+                            
+                            // Update output
+                            outputText.value = paragraphedText;
+                            progressPercent.value = 100;
+                            progressStatus.value = 'Processing complete!';
+                        } else {
+                            // Process in batches for larger texts
+                            const batchSize = 50;
+                            const overlap = 10;
+                            const batches = createBatches(sentences, batchSize, overlap);
+                            
+                            progressStatus.value = `Processing text in ${batches.length} batches...`;
+                            
+                            // Process each batch
+                            const allParagraphStructures = [];
+                            for (let i = 0; i < batches.length; i++) {
+                                progressPercent.value = (i / batches.length) * 90; // Reserve 10% for final reconstruction
+                                
+                                const batchStructure = await processBatch(batches[i], i, batches.length, overlap);
+                                allParagraphStructures.push(...batchStructure);
+                            }
+                            
+                            // Sort paragraph structures by start index
+                            allParagraphStructures.sort((a, b) => a.start - b.start);
+                            
+                            // Merge overlapping paragraphs
+                            const mergedStructures = [];
+                            for (const paragraph of allParagraphStructures) {
+                                // Skip if this paragraph is entirely contained within the previous one
+                                if (mergedStructures.length > 0) {
+                                    const lastParagraph = mergedStructures[mergedStructures.length - 1];
+                                    if (paragraph.start >= lastParagraph.start && paragraph.end <= lastParagraph.end) {
+                                        continue;
+                                    }
+                                    
+                                    // Merge with previous paragraph if they overlap
+                                    if (paragraph.start <= lastParagraph.end) {
+                                        lastParagraph.end = Math.max(lastParagraph.end, paragraph.end);
+                                        continue;
+                                    }
+                                }
+                                
+                                mergedStructures.push(paragraph);
+                            }
+                            
+                            // Reconstruct paragraphs
+                            progressStatus.value = 'Reconstructing paragraphs...';
+                            progressPercent.value = 95;
+                            const paragraphedText = reconstructParagraphs(sentences, mergedStructures);
+                            
+                            // Update output
+                            outputText.value = paragraphedText;
+                            progressPercent.value = 100;
+                            progressStatus.value = 'Processing complete!';
                         }
-                        
-                        // Reconstruct paragraphs
-                        const paragraphedText = reconstructParagraphs(sentences, paragraphStructure);
-                        
-                        // Update output
-                        outputText.value = paragraphedText;
                     } catch (e) {
                         error.value = e.message;
                         console.error('Processing error:', e);
@@ -416,6 +549,8 @@
                     copied,
                     showSettings,
                     error,
+                    progressPercent,
+                    progressStatus,
                     settings,
                     inputStats,
                     outputStats,
