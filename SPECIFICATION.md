@@ -62,17 +62,34 @@ A minimal Single Page Application in a single HTML file that efficiently segment
   - Send numbered sentences to LLM (OpenAI compatible API)
   - Request compact paragraph structure (e.g., "P1: 1-4; P2: 5-9") 
   - Reconstruct paragraphs based on this mapping
+- Batch Processing for Large Texts:
+  - Process text in batches of 50 sentences with 10-sentence overlap
+  - Merge paragraph structures from multiple batches
+  - Handle edge cases at batch boundaries
 
-### 3. LLM Integration
+### 3. Section Identification
+- Paragraph Grouping Approach:
+  - Send paragraphs to LLM for section identification
+  - Request section structure with headings (e.g., "S1[Introduction]: P1-P5")
+  - Reconstruct text with section headings based on this mapping
+- Batch Processing for Large Texts:
+  - Process text in batches of 20 paragraphs
+  - For each batch after the first, include paragraphs from the last section of the previous batch
+  - This ensures continuity between sections across batch boundaries
+  - Merge section structures from multiple batches
+  - Handle overlapping sections intelligently
+
+### 4. LLM Integration
 - OpenAI-compatible API integration
 - API endpoint and key stored in localStorage
-- Simple prompt engineering for paragraph detection
+- Simple prompt engineering for paragraph and section detection
 - Optimized to minimize token usage
 
-### 4. Output & Export
+### 5. Output & Export
 - Display segmented text with paragraph breaks in output area
-- Show statistics: paragraph count, sentence count, and word count
-- One-click copy to clipboard functionality
+- Display sectioned text with headings in a separate output area
+- Show statistics: paragraph count, sentence count, section count, and word count
+- One-click copy to clipboard functionality for both paragraphed and sectioned text
 
 ## Technical Architecture
 
@@ -115,15 +132,22 @@ A minimal Single Page Application in a single HTML file that efficiently segment
 - `callLLMService()`: Make API request to language model
 - `parseParagraphStructure()`: Extract paragraph structure from LLM response
 - `reconstructParagraphs()`: Apply LLM structure to original text
+- `createBatches()`: Create batches of sentences or paragraphs for processing
+- `adjustParagraphStructure()`: Adjust paragraph indices based on batch position
+- `prepareSectionPrompt()`: Format paragraphs for section identification
+- `parseSectionStructure()`: Extract section structure from LLM response
+- `reconstructSections()`: Apply section structure to paragraphed text
 - `copyToClipboard()`: Copy formatted output to clipboard
 
 ## User Interface
 
-### Main UI (Minimal)
+### Main UI
 - Input text area (for pasting raw transcription)
 - "Split paragraphs" button
-- Output text area (showing paragraphed result)
-- Copy to clipboard button
+- Paragraphed text area (showing paragraphed result)
+- "Add sections" button
+- Sectioned text area (showing text with section headings)
+- Copy to clipboard buttons for both output areas
 - Settings toggle (to access API configuration)
 
 ### Settings Panel (Toggleable)
@@ -136,7 +160,10 @@ A minimal Single Page Application in a single HTML file that efficiently segment
 1. User pastes transcription text into input area
 2. User clicks "Split paragraphs" button
 3. Application processes text and displays paragraphed result
-4. User copies result with one click
+4. User can copy paragraphed result or proceed to add sections
+5. If desired, user clicks "Add sections" button
+6. Application processes paragraphed text and displays sectioned result with headings
+7. User copies final result with one click
 
 ## Implementation Roadmap
 
@@ -154,11 +181,20 @@ A minimal Single Page Application in a single HTML file that efficiently segment
 - Statistics display (sentences, words, characters, paragraphs)
 - Loading indicator during processing
 - Basic mobile responsiveness
+- Batch processing for large texts
 
-### Phase 3: Optional Enhancements (If Needed)
+### Phase 3: Section Identification (Implemented)
+- Add section identification capability
+- Three-panel UI (input, paragraphed output, sectioned output)
+- Batch processing for section identification
+- Intelligent handling of section boundaries between batches
+- Section statistics display
+
+### Phase 4: Optional Enhancements (If Needed)
 - Dark/light mode toggle
 - Processing history (last few conversions)
-- Simple statistics on paragraph density
+- Simple statistics on paragraph and section density
+- Custom section heading formatting options
 
 ## Technical Requirements
 - Modern web browser support
