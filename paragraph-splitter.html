@@ -25,7 +25,7 @@
             <p class="text-gray-600">Split your text into logical paragraphs using AI</p>
         </header>
 
-        <main class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <main class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <!-- Input Section -->
             <div class="bg-white rounded-lg shadow-md p-4">
                 <h2 class="text-xl font-semibold mb-2 text-gray-700">Input Text</h2>
@@ -57,25 +57,67 @@
                 </div>
             </div>
 
-            <!-- Output Section -->
+            <!-- Paragraphed Output Section -->
             <div class="bg-white rounded-lg shadow-md p-4">
-                <h2 class="text-xl font-semibold mb-2 text-gray-700">Output Text</h2>
+                <h2 class="text-xl font-semibold mb-2 text-gray-700">Paragraphed Text</h2>
                 <textarea 
                     v-model="outputText" 
                     class="w-full h-64 p-3 border border-gray-300 rounded resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Paragraphed text will appear here..."
+                ></textarea>
+                <div class="mt-4 flex flex-col gap-2">
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm text-gray-500">{{ outputStats }}</span>
+                        <div class="flex gap-2">
+                            <button 
+                                @click="copyToClipboard('output')" 
+                                class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md transition-colors"
+                                :disabled="!outputText"
+                                :class="{'opacity-50 cursor-not-allowed': !outputText}"
+                            >
+                                <span v-if="copied === 'output'">Copied!</span>
+                                <span v-else>Copy</span>
+                            </button>
+                            <button 
+                                @click="processSections" 
+                                class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md transition-colors"
+                                :disabled="isSectioning || !outputText.trim()"
+                                :class="{'opacity-50 cursor-not-allowed': isSectioning || !outputText.trim()}"
+                            >
+                                <span v-if="isSectioning">Processing...</span>
+                                <span v-else>Add Sections</span>
+                            </button>
+                        </div>
+                    </div>
+                    <!-- Section Progress Bar -->
+                    <div v-if="isSectioning" class="w-full">
+                        <div class="w-full bg-gray-200 rounded-full h-2.5">
+                            <div class="bg-blue-600 h-2.5 rounded-full" :style="{ width: `${sectionProgressPercent}%` }"></div>
+                        </div>
+                        <p class="text-sm text-gray-600 mt-1">{{ sectionProgressStatus }} ({{ Math.round(sectionProgressPercent) }}%)</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sectioned Output Section -->
+            <div class="bg-white rounded-lg shadow-md p-4">
+                <h2 class="text-xl font-semibold mb-2 text-gray-700">Sectioned Text</h2>
+                <textarea 
+                    v-model="sectionedText" 
+                    class="w-full h-64 p-3 border border-gray-300 rounded resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Sectioned text with headings will appear here..."
                     readonly
                 ></textarea>
                 <div class="mt-4 flex justify-between items-center">
-                    <span class="text-sm text-gray-500">{{ outputStats }}</span>
+                    <span class="text-sm text-gray-500">{{ sectionedStats }}</span>
                     <button 
-                        @click="copyToClipboard" 
+                        @click="copyToClipboard('sectioned')" 
                         class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md transition-colors"
-                        :disabled="!outputText"
-                        :class="{'opacity-50 cursor-not-allowed': !outputText}"
+                        :disabled="!sectionedText"
+                        :class="{'opacity-50 cursor-not-allowed': !sectionedText}"
                     >
-                        <span v-if="copied">Copied!</span>
-                        <span v-else>Copy to Clipboard</span>
+                        <span v-if="copied === 'sectioned'">Copied!</span>
+                        <span v-else>Copy</span>
                     </button>
                 </div>
             </div>
@@ -194,12 +236,16 @@
                 // State
                 const inputText = ref('');
                 const outputText = ref('');
+                const sectionedText = ref('');
                 const isProcessing = ref(false);
-                const copied = ref(false);
+                const isSectioning = ref(false);
+                const copied = ref('');
                 const showSettings = ref(false);
                 const error = ref('');
                 const progressPercent = ref(0);
                 const progressStatus = ref('');
+                const sectionProgressPercent = ref(0);
+                const sectionProgressStatus = ref('');
                 const settings = ref({
                     apiEndpoint: 'https://api.openai.com/v1/chat/completions',
                     apiKey: '',
@@ -226,6 +272,16 @@
                     const words = text.split(/\s+/).length;
                     const sentences = splitSentences(text).length;
                     return `${paragraphs} paragraphs, ${sentences} sentences, ${words} words`;
+                });
+
+                const sectionedStats = computed(() => {
+                    const text = sectionedText.value.trim();
+                    if (!text) return 'No text';
+                    
+                    const sections = (text.match(/^## .+$/gm) || []).length;
+                    const paragraphs = text.split(/\n\n+/).length - sections; // Subtract section headings
+                    const words = text.split(/\s+/).length - sections * 2; // Subtract "## Heading" words
+                    return `${sections} sections, ${paragraphs} paragraphs, ${words} words`;
                 });
 
                 // Methods
@@ -510,14 +566,409 @@
                     }
                 };
 
-                const copyToClipboard = () => {
-                    if (!outputText.value) return;
+                // Section processing functions
+                const createParagraphBatches = (paragraphs, batchSize = 20, previousSectionEnd = null) => {
+                    const batches = [];
+                    let i = 0;
                     
-                    navigator.clipboard.writeText(outputText.value)
+                    // For the first batch, just take the first batchSize paragraphs
+                    let end = Math.min(i + batchSize, paragraphs.length);
+                    batches.push({
+                        paragraphs: paragraphs.slice(i, end),
+                        startIndex: i,
+                        endIndex: end - 1
+                    });
+                    
+                    // For subsequent batches, include the last section from the previous batch
+                    i = end;
+                    while (i < paragraphs.length) {
+                        // If we have a previousSectionEnd from the last batch, adjust the start
+                        // to include those paragraphs in this batch
+                        let batchStart = i;
+                        if (previousSectionEnd !== null && batches.length > 0) {
+                            batchStart = previousSectionEnd;
+                        }
+                        
+                        end = Math.min(i + batchSize, paragraphs.length);
+                        
+                        // Ensure we don't create a batch with only overlapping paragraphs
+                        if (end > batchStart) {
+                            batches.push({
+                                paragraphs: paragraphs.slice(batchStart, end),
+                                startIndex: batchStart,
+                                endIndex: end - 1,
+                                overlapStart: batchStart,
+                                overlapEnd: i - 1
+                            });
+                        }
+                        
+                        i = end;
+                    }
+                    
+                    return batches;
+                };
+
+                const prepareSectionPrompt = (paragraphs) => {
+                    // Number each paragraph for the LLM
+                    // Truncate long paragraphs to avoid token limits
+                    const numberedParagraphs = paragraphs.map((p, i) => `P${i + 1}: ${p.substring(0, 150)}${p.length > 150 ? '...' : ''}`).join('\n\n');
+                    
+                    // Create the prompt for the LLM with clearer instructions
+                    return {
+                        role: "user",
+                        content: `Analyze these paragraphs and identify logical sections. For each section, provide a concise, descriptive heading.
+
+IMPORTANT: Return ONLY the section structure in EXACTLY this format: 
+'S1[Heading Title]: P1-P5; S2[Another Heading]: P6-P9; ...'
+
+Do not include any additional text, explanations, or formatting. Just the section structure as specified.
+Every paragraph must be included in exactly one section.
+Do not skip any paragraphs.
+
+${numberedParagraphs}`
+                    };
+                };
+
+                const parseSectionStructure = (response) => {
+                    const sections = [];
+                    
+                    // Log the response for debugging
+                    console.log("LLM Response:", response);
+                    
+                    // Try multiple regex patterns to handle different possible formats
+                    
+                    // Pattern 1: Standard format "S1[Heading]: P1-P5"
+                    let regex = /S\d+\s*\[\s*(.*?)\s*\]\s*:\s*P(\d+)\s*-\s*P(\d+)/g;
+                    let match;
+                    
+                    while ((match = regex.exec(response)) !== null) {
+                        const heading = match[1].trim();
+                        const startParagraph = parseInt(match[2]);
+                        const endParagraph = parseInt(match[3]);
+                        
+                        console.log(`Found section: "${heading}" from P${startParagraph} to P${endParagraph}`);
+                        
+                        if (heading && !isNaN(startParagraph) && !isNaN(endParagraph)) {
+                            sections.push({
+                                heading,
+                                start: startParagraph,
+                                end: endParagraph
+                            });
+                        }
+                    }
+                    
+                    // If no sections found with the first pattern, try alternative patterns
+                    if (sections.length === 0) {
+                        // Pattern 2: Format with section name outside brackets "Section 1 [Heading]: P1-P5"
+                        regex = /S(?:ection)?\s*\d+\s*\[\s*(.*?)\s*\]\s*:\s*P(\d+)\s*-\s*P(\d+)/g;
+                        
+                        while ((match = regex.exec(response)) !== null) {
+                            const heading = match[1].trim();
+                            const startParagraph = parseInt(match[2]);
+                            const endParagraph = parseInt(match[3]);
+                            
+                            if (heading && !isNaN(startParagraph) && !isNaN(endParagraph)) {
+                                sections.push({
+                                    heading,
+                                    start: startParagraph,
+                                    end: endParagraph
+                                });
+                            }
+                        }
+                    }
+                    
+                    // Pattern 3: Format with parentheses "Section 1: Heading (P1-P5)"
+                    if (sections.length === 0) {
+                        regex = /S(?:ection)?\s*\d+\s*:\s*(.*?)\s*\(\s*P(\d+)\s*-\s*P(\d+)\s*\)/g;
+                        
+                        while ((match = regex.exec(response)) !== null) {
+                            const heading = match[1].trim();
+                            const startParagraph = parseInt(match[2]);
+                            const endParagraph = parseInt(match[3]);
+                            
+                            if (heading && !isNaN(startParagraph) && !isNaN(endParagraph)) {
+                                sections.push({
+                                    heading,
+                                    start: startParagraph,
+                                    end: endParagraph
+                                });
+                            }
+                        }
+                    }
+                    
+                    // Pattern 4: Format with no brackets "Section 1: Heading - P1-P5"
+                    if (sections.length === 0) {
+                        regex = /S(?:ection)?\s*\d+\s*:\s*(.*?)\s*-\s*P(\d+)\s*-\s*P(\d+)/g;
+                        
+                        while ((match = regex.exec(response)) !== null) {
+                            const heading = match[1].trim();
+                            const startParagraph = parseInt(match[2]);
+                            const endParagraph = parseInt(match[3]);
+                            
+                            if (heading && !isNaN(startParagraph) && !isNaN(endParagraph)) {
+                                sections.push({
+                                    heading,
+                                    start: startParagraph,
+                                    end: endParagraph
+                                });
+                            }
+                        }
+                    }
+                    
+                    console.log(`Parsed ${sections.length} sections`);
+                    return sections;
+                };
+
+                const adjustSectionStructure = (sectionStructure, isFirstBatch, isLastBatch, previousSectionEnd, batchStartIndex) => {
+                    if (sectionStructure.length === 0) return [];
+                    
+                    // For non-first batches, we need to handle the overlap with the previous batch
+                    let adjustedStructure = [...sectionStructure];
+                    
+                    if (!isFirstBatch && previousSectionEnd) {
+                        // Remove any sections that are entirely within the overlap
+                        adjustedStructure = adjustedStructure.filter(section => 
+                            !(section.end <= previousSectionEnd - batchStartIndex)
+                        );
+                        
+                        // Adjust the start of the first section if it overlaps with the previous batch
+                        if (adjustedStructure.length > 0 && adjustedStructure[0].start <= previousSectionEnd - batchStartIndex) {
+                            adjustedStructure[0].start = previousSectionEnd - batchStartIndex + 1;
+                        }
+                    }
+                    
+                    // Adjust indices to global paragraph positions
+                    return adjustedStructure.map(section => ({
+                        heading: section.heading,
+                        start: section.start + batchStartIndex,
+                        end: section.end + batchStartIndex
+                    }));
+                };
+
+                const reconstructSections = (paragraphs, sectionStructure) => {
+                    let result = '';
+                    
+                    // Sort sections by start index to ensure proper order
+                    sectionStructure.sort((a, b) => a.start - b.start);
+                    
+                    // Track which paragraphs have been included
+                    const includedParagraphs = new Set();
+                    
+                    // Check if we have any paragraphs before the first section
+                    if (sectionStructure.length > 0 && sectionStructure[0].start > 1) {
+                        result += `## Introduction\n\n`;
+                        for (let i = 0; i < sectionStructure[0].start - 1; i++) {
+                            if (i < paragraphs.length) {
+                                result += paragraphs[i] + '\n\n';
+                                includedParagraphs.add(i);
+                            }
+                        }
+                    }
+                    
+                    // Process each section
+                    let lastEnd = 0;
+                    for (const section of sectionStructure) {
+                        // Check if there are any paragraphs between the last section and this one
+                        if (section.start > lastEnd + 1) {
+                            result += `## Transition\n\n`;
+                            for (let i = lastEnd; i < section.start - 1; i++) {
+                                if (i < paragraphs.length && !includedParagraphs.has(i)) {
+                                    result += paragraphs[i] + '\n\n';
+                                    includedParagraphs.add(i);
+                                }
+                            }
+                        }
+                        
+                        // Add section heading
+                        result += `## ${section.heading}\n\n`;
+                        
+                        // Add paragraphs for this section
+                        for (let i = section.start - 1; i < section.end; i++) {
+                            if (i < paragraphs.length && !includedParagraphs.has(i)) {
+                                result += paragraphs[i] + '\n\n';
+                                includedParagraphs.add(i);
+                            }
+                        }
+                        
+                        lastEnd = section.end;
+                    }
+                    
+                    // Add any remaining paragraphs without a section
+                    if (lastEnd < paragraphs.length) {
+                        result += `## Additional Content\n\n`;
+                        for (let i = lastEnd; i < paragraphs.length; i++) {
+                            if (!includedParagraphs.has(i)) {
+                                result += paragraphs[i] + '\n\n';
+                            }
+                        }
+                    }
+                    
+                    return result.trim();
+                };
+
+                const processSectionBatch = async (batch, previousSectionEnd, batchIndex, totalBatches) => {
+                    sectionProgressStatus.value = `Processing batch ${batchIndex + 1} of ${totalBatches}...`;
+                    
+                    // Process this batch
+                    const prompt = prepareSectionPrompt(batch.paragraphs);
+                    const llmResponse = await callLLMService(prompt);
+                    const sectionStructure = parseSectionStructure(llmResponse);
+                    
+                    if (sectionStructure.length === 0) {
+                        throw new Error(`Failed to parse section structure for batch ${batchIndex + 1}`);
+                    }
+                    
+                    // Adjust section structure based on batch position and previous batch
+                    const adjustedStructure = adjustSectionStructure(
+                        sectionStructure,
+                        batchIndex === 0, // isFirstBatch
+                        batchIndex === totalBatches - 1, // isLastBatch
+                        previousSectionEnd,
+                        batch.startIndex
+                    );
+                    
+                    return adjustedStructure;
+                };
+
+                const processSections = async () => {
+                    if (!outputText.value.trim() || isSectioning.value) return;
+                    
+                    if (!settings.value.apiKey) {
+                        error.value = 'Please enter your API key in the settings';
+                        showSettings.value = true;
+                        return;
+                    }
+                    
+                    isSectioning.value = true;
+                    error.value = '';
+                    sectionProgressPercent.value = 0;
+                    sectionProgressStatus.value = 'Preparing to identify sections...';
+                    
+                    try {
+                        // Split text into paragraphs
+                        const paragraphs = outputText.value.split(/\n\n+/).filter(p => p.trim());
+                        
+                        if (paragraphs.length === 0) {
+                            throw new Error('No valid paragraphs found in the input text');
+                        }
+                        
+                        // For small texts, process in a single batch
+                        if (paragraphs.length <= 20) {
+                            sectionProgressStatus.value = 'Identifying sections...';
+                            sectionProgressPercent.value = 30;
+                            
+                            // Prepare prompt for LLM
+                            const prompt = prepareSectionPrompt(paragraphs);
+                            
+                            // Call LLM service
+                            const llmResponse = await callLLMService(prompt);
+                            sectionProgressPercent.value = 70;
+                            
+                            // Parse section structure from LLM response
+                            const sectionStructure = parseSectionStructure(llmResponse);
+                            
+                            if (sectionStructure.length === 0) {
+                                throw new Error('Failed to parse section structure from LLM response');
+                            }
+                            
+                            // Reconstruct with sections
+                            sectionProgressStatus.value = 'Reconstructing with sections...';
+                            const sectionedResult = reconstructSections(paragraphs, sectionStructure);
+                            
+                            // Update output
+                            sectionedText.value = sectionedResult;
+                            sectionProgressPercent.value = 100;
+                            sectionProgressStatus.value = 'Section identification complete!';
+                        } else {
+                            // Process in batches
+                            const batchSize = 20;
+                            
+                            // First, create initial batches
+                            const batches = createParagraphBatches(paragraphs, batchSize);
+                            
+                            sectionProgressStatus.value = `Processing text in ${batches.length} batches...`;
+                            
+                            // Process each batch
+                            const allSectionStructures = [];
+                            let previousSectionEnd = null;
+                            
+                            for (let i = 0; i < batches.length; i++) {
+                                sectionProgressPercent.value = (i / batches.length) * 90; // Reserve 10% for final reconstruction
+                                
+                                console.log(`Processing batch ${i + 1}/${batches.length}, paragraphs ${batches[i].startIndex + 1}-${batches[i].endIndex + 1}`);
+                                
+                                // Process this batch
+                                const batchStructure = await processSectionBatch(
+                                    batches[i], 
+                                    previousSectionEnd, 
+                                    i, 
+                                    batches.length
+                                );
+                                
+                                allSectionStructures.push(...batchStructure);
+                                
+                                // For the next batch, we want to include the last section from this batch
+                                if (batchStructure.length > 0) {
+                                    const lastSection = batchStructure[batchStructure.length - 1];
+                                    previousSectionEnd = lastSection.end;
+                                    console.log(`Last section in batch ${i + 1} ends at paragraph ${previousSectionEnd}`);
+                                }
+                            }
+                            
+                            // Sort section structures by start index
+                            allSectionStructures.sort((a, b) => a.start - b.start);
+                            
+                            // Merge overlapping sections
+                            const mergedStructures = [];
+                            for (const section of allSectionStructures) {
+                                // Skip if this section is entirely contained within the previous one
+                                if (mergedStructures.length > 0) {
+                                    const lastSection = mergedStructures[mergedStructures.length - 1];
+                                    if (section.start >= lastSection.start && section.end <= lastSection.end) {
+                                        continue;
+                                    }
+                                    
+                                    // Merge with previous section if they overlap
+                                    if (section.start <= lastSection.end) {
+                                        // Use the heading from the larger section
+                                        if (section.end > lastSection.end) {
+                                            lastSection.heading = section.heading;
+                                        }
+                                        lastSection.end = Math.max(lastSection.end, section.end);
+                                        continue;
+                                    }
+                                }
+                                
+                                mergedStructures.push(section);
+                            }
+                            
+                            // Reconstruct with sections
+                            sectionProgressStatus.value = 'Reconstructing with sections...';
+                            sectionProgressPercent.value = 95;
+                            const sectionedResult = reconstructSections(paragraphs, mergedStructures);
+                            
+                            // Update output
+                            sectionedText.value = sectionedResult;
+                            sectionProgressPercent.value = 100;
+                            sectionProgressStatus.value = 'Section identification complete!';
+                        }
+                    } catch (e) {
+                        error.value = e.message;
+                        console.error('Section processing error:', e);
+                    } finally {
+                        isSectioning.value = false;
+                    }
+                };
+
+                const copyToClipboard = (type) => {
+                    const text = type === 'sectioned' ? sectionedText.value : outputText.value;
+                    if (!text) return;
+                    
+                    navigator.clipboard.writeText(text)
                         .then(() => {
-                            copied.value = true;
+                            copied.value = type;
                             setTimeout(() => {
-                                copied.value = false;
+                                copied.value = '';
                             }, 2000);
                         })
                         .catch(e => {
@@ -545,16 +996,22 @@
                 return {
                     inputText,
                     outputText,
+                    sectionedText,
                     isProcessing,
+                    isSectioning,
                     copied,
                     showSettings,
                     error,
                     progressPercent,
                     progressStatus,
+                    sectionProgressPercent,
+                    sectionProgressStatus,
                     settings,
                     inputStats,
                     outputStats,
+                    sectionedStats,
                     processText,
+                    processSections,
                     copyToClipboard,
                     saveSettings
                 };
