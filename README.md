@@ -4,6 +4,10 @@ A web-based tool that uses AI to split unformatted text into logical paragraphs 
 
 ![Paragraph Splitter Screenshot](screenshot.png)
 
+## Live Demo
+
+Try the Paragraph Splitter online: [Live Demo](http://resources.faithfm.com.au/paragraph-splitter.html)
+
 ## How It Works
 
 1. Paste your unformatted text into the input area
