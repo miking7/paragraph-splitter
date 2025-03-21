@@ -4,6 +4,10 @@
 - Input: Numbered sentences (e.g., "1. First sentence. 2. Second sentence.")
 - Prompt: "Identify which sentences should be grouped together into paragraphs. Return ONLY the paragraph structure in this format: 'P1: 1-4; P2: 5-9; ...' with no additional text."
 - Expected output: "P1: 1-4; P2: 5-9; P3: 10-15"
+- Section prompting:
+  - Input: Numbered paragraphs (e.g., "P1: First paragraph. P2: Second paragraph.")
+  - Prompt: "Analyze these paragraphs and identify logical sections with descriptive headings."
+  - Expected output: "S1[Heading Title]: P1-P5; S2[Another Heading]: P6-P9; ..." or "S1[Heading]: P1; S2[Heading]: P2;"
 
 ### API Integration
 - Default endpoint: OpenAI API compatible
@@ -137,7 +141,7 @@ A minimal Single Page Application in a single HTML file that efficiently segment
 - `createBatches()`: Create batches of sentences or paragraphs for processing
 - `adjustParagraphStructure()`: Adjust paragraph indices based on batch position
 - `prepareSectionPrompt()`: Format paragraphs for section identification
-- `parseSectionStructure()`: Extract section structure from LLM response
+- `parseSectionStructure()`: Extract section structure from LLM response, handling various formats including multi-paragraph ranges (P1-P5) and single-paragraph sections (P1)
 - `reconstructSections()`: Apply section structure to paragraphed text
 - `copyToClipboard()`: Copy formatted output to clipboard
 

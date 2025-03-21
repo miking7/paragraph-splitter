@@ -729,6 +729,24 @@ ${numberedParagraphs}`
                         }
                     }
                     
+                    // Pattern 5: Format with single paragraphs "S1[Heading]: P1;"
+                    if (sections.length === 0) {
+                        regex = /S\d+\s*\[\s*(.*?)\s*\]\s*:\s*P(\d+)\s*;/g;
+                        
+                        while ((match = regex.exec(response)) !== null) {
+                            const heading = match[1].trim();
+                            const paragraph = parseInt(match[2]);
+                            
+                            if (heading && !isNaN(paragraph)) {
+                                sections.push({
+                                    heading,
+                                    start: paragraph,
+                                    end: paragraph
+                                });
+                            }
+                        }
+                    }
+                    
                     console.log(`Parsed ${sections.length} sections`);
                     return sections;
                 };
