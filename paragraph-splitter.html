@@ -978,17 +978,60 @@ ${numberedParagraphs}`
                     const text = type === 'sectioned' ? sectionedText.value : outputText.value;
                     if (!text) return;
                     
-                    navigator.clipboard.writeText(text)
-                        .then(() => {
+                    // Try using the modern Clipboard API first
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(text)
+                            .then(() => {
+                                copied.value = type;
+                                setTimeout(() => {
+                                    copied.value = '';
+                                }, 2000);
+                            })
+                            .catch(e => {
+                                console.error('Clipboard API error:', e);
+                                // Fall back to the textarea method if Clipboard API fails
+                                fallbackCopyToClipboard(text, type);
+                            });
+                    } else {
+                        // Fall back to the textarea method if Clipboard API is not available
+                        fallbackCopyToClipboard(text, type);
+                    }
+                };
+                
+                // Fallback method for copying to clipboard using a temporary textarea
+                const fallbackCopyToClipboard = (text, type) => {
+                    try {
+                        // Create a temporary textarea element
+                        const textarea = document.createElement('textarea');
+                        textarea.value = text;
+                        
+                        // Make the textarea out of viewport
+                        textarea.style.position = 'fixed';
+                        textarea.style.left = '-999999px';
+                        textarea.style.top = '-999999px';
+                        
+                        document.body.appendChild(textarea);
+                        textarea.focus();
+                        textarea.select();
+                        
+                        // Execute the copy command
+                        const successful = document.execCommand('copy');
+                        
+                        // Remove the temporary textarea
+                        document.body.removeChild(textarea);
+                        
+                        if (successful) {
                             copied.value = type;
                             setTimeout(() => {
                                 copied.value = '';
                             }, 2000);
-                        })
-                        .catch(e => {
+                        } else {
                             error.value = 'Failed to copy to clipboard';
-                            console.error('Clipboard error:', e);
-                        });
+                        }
+                    } catch (e) {
+                        error.value = 'Failed to copy to clipboard';
+                        console.error('Fallback clipboard error:', e);
+                    }
                 };
 
                 // Close settings panel

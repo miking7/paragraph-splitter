@@ -90,6 +90,8 @@ A minimal Single Page Application in a single HTML file that efficiently segment
 - Display sectioned text with headings in a separate output area
 - Show statistics: paragraph count, sentence count, section count, and word count
 - One-click copy to clipboard functionality for both paragraphed and sectioned text
+  - Cross-browser compatible clipboard implementation
+  - Works in both secure (HTTPS) and non-secure (HTTP) contexts
 
 ## Technical Architecture
 
@@ -150,11 +152,16 @@ A minimal Single Page Application in a single HTML file that efficiently segment
 - Copy to clipboard buttons for both output areas
 - Settings toggle (to access API configuration)
 
-### Settings Panel (Toggleable)
+### Settings Panel (Toggleable Overlay)
+- Modal overlay with semi-transparent backdrop
 - API endpoint input (OpenAI-compatible by default)
 - API key input 
 - Save settings button
 - Settings automatically saved to localStorage
+- Multiple dismissal methods:
+  - Close button in top-right corner
+  - Clicking outside the panel
+  - Pressing the Escape key
 
 ### User Flow
 1. User pastes transcription text into input area
