@@ -1057,20 +1057,9 @@ ${numberedParagraphs}`
                     showSettings.value = false;
                 };
                 
-                // Save input text to localStorage when it changes
-                watch(inputText, (newValue) => {
-                    localStorage.setItem('paragraphSplitterInput', newValue);
-                });
-
                 // Lifecycle hooks
                 onMounted(() => {
                     loadSettings();
-                    
-                    // Try to load saved text from localStorage
-                    const savedInput = localStorage.getItem('paragraphSplitterInput');
-                    if (savedInput) {
-                        inputText.value = savedInput;
-                    }
                     
                     // Add event listener for Escape key
                     window.addEventListener('keydown', (e) => {

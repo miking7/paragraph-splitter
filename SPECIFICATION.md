@@ -219,7 +219,7 @@ A minimal Single Page Application in a single HTML file that efficiently segment
 ### localStorage Implementation
 - API endpoint URL
 - API key (securely stored)
-- Last used settings
+- Model settings
 
 ### No Server-Side Requirements
 - All persistence handled via browser localStorage
